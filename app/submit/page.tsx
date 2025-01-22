@@ -47,6 +47,17 @@ export default function SubmitPage() {
       setDraggingPoint(point);
     };
 
+  const computeBezierY = (x: number, project: Project) => {
+    if (project.xIntercept === 0) return 0; // ✅ Prevent division by zero
+
+    const t = Math.max(0, Math.min(1, x / project.xIntercept)); // ✅ Clamp between 0 and 1
+    return (
+      (1 - t) ** 2 * project.yIntercept + // ✅ Ensure correct start point scaling
+      2 * (1 - t) * t * project.middlePoint.y + // ✅ Maintain proper middle control point
+      t ** 2 * 0 // ✅ Ensure end remains at 0
+    );
+  };
+
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!draggingPoint || !svgRef.current) return;
@@ -59,30 +70,41 @@ export default function SubmitPage() {
       // Convert screen coordinates to chart values
       const xScale = 200000 / rect.width;
       const yScale = 100 / rect.height;
-      const chartX = Math.max(0, Math.min(x * xScale, 200000));
-      const chartY = Math.max(0, Math.min(100 - y * yScale, 100));
 
-      switch (draggingPoint) {
-        case "x":
-          setProject((prev) => ({
-            ...prev,
-            xIntercept: chartX,
-            middlePoint: { ...prev.middlePoint, x: chartX / 2 },
-          }));
-          break;
-        case "y":
-          setProject((prev) => ({ ...prev, yIntercept: chartY }));
-          break;
-        case "middle":
-          setProject((prev) => ({
-            ...prev,
-            middlePoint: {
-              ...prev.middlePoint,
-              y: chartY,
-            },
-          }));
-          break;
-      }
+      const chartX = Math.max(
+        0,
+        Math.min(Math.round((x * xScale) / 1000) * 1000, 200000),
+      );
+      let chartY = Math.max(0, Math.min(100 - y * yScale, 100));
+
+      setProject((prev) => {
+        switch (draggingPoint) {
+          case "x":
+            return {
+              ...prev,
+              xIntercept: chartX,
+              middlePoint: {
+                x: chartX / 2,
+                y: prev.middlePoint.y, // ✅ Keep `y` unchanged when moving `x`
+              },
+            };
+          case "y":
+            return {
+              ...prev,
+              yIntercept: chartY,
+            };
+          case "middle":
+            return {
+              ...prev,
+              middlePoint: {
+                x: prev.middlePoint.x, // ✅ Keep `x` unchanged
+                y: chartY, // ✅ Move freely, no snap-back dip
+              },
+            };
+          default:
+            return prev;
+        }
+      });
     },
     [draggingPoint],
   );
@@ -101,6 +123,16 @@ export default function SubmitPage() {
       };
     }
   }, [draggingPoint, handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    setProject((prev) => ({
+      ...prev,
+      middlePoint: {
+        x: prev.xIntercept / 2, // ✅ Ensure x stays at the center
+        y: prev.middlePoint.y, // ✅ Do NOT override y!
+      },
+    }));
+  }, [project.xIntercept]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +172,7 @@ export default function SubmitPage() {
                         dataKey="x"
                         type="number"
                         label={{ value: "Funding ($)", position: "bottom" }}
-                        domain={[0, "dataMax"]}
+                        domain={[0, 200000]}
                       />
                       <YAxis
                         label={{
@@ -158,32 +190,36 @@ export default function SubmitPage() {
                         strokeWidth={2}
                         dot={false}
                       />
-                      <svg ref={svgRef} className="absolute inset-0">
-                        {/* X-intercept control point */}
+                      <svg
+                        ref={svgRef}
+                        className="absolute inset-0 pointer-events-auto"
+                      >
+                        {/* X-Intercept Control Point (Moves along x-axis but stays inside) */}
                         <circle
-                          cx={`${(project.xIntercept / 200000) * 100}%`}
-                          cy="100%"
+                          cx={`${((project.xIntercept - 0) / (214600 - 0)) * 87 + 13}%`}
+                          cy="87%" // Locked to the x-axis
                           r={6}
                           fill={project.color}
                           cursor="pointer"
                           onMouseDown={handleMouseDown("x")}
                         />
-                        {/* Y-intercept control point */}
+
+                        {/* Y-Intercept Control Point (Moves up/down but stays inside) */}
                         <circle
-                          cx="0%"
-                          cy={`${100 - project.yIntercept}%`}
+                          cx="13%" // Locked to the y-axis
+                          cy={`${100 - ((project.yIntercept - 0) / (106 - 0)) * 87 - 13}%`}
                           r={6}
                           fill={project.color}
                           cursor="pointer"
                           onMouseDown={handleMouseDown("y")}
                         />
-                        {/* Middle control point */}
+                        {/* Middle Control Point (Moves up/down but stays on curve's midpoint) */}
                         <circle
-                          cx={`${(project.middlePoint.x / 200000) * 100}%`}
-                          cy={`${100 - project.middlePoint.y}%`}
+                          cx={`${(project.xIntercept / 2 / 214600) * 87 + 13}%`} // X is always at midpoint
+                          cy={`${100 - ((computeBezierY(project.xIntercept / 2, project) - 0) / (106 - 0)) * 87 - 13}%`} // ✅ Y is computed dynamically
                           r={6}
                           fill={project.color}
-                          cursor="pointer"
+                          cursor="grab"
                           onMouseDown={handleMouseDown("middle")}
                         />
                       </svg>
@@ -253,7 +289,7 @@ export default function SubmitPage() {
                       onValueChange={([value]) =>
                         setProject({
                           ...project,
-                          xIntercept: parseFloat(value.toFixed(2)),
+                          xIntercept: value,
                           middlePoint: { ...project.middlePoint, x: value / 2 },
                         })
                       }
