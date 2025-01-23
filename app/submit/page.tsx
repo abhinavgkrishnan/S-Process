@@ -41,77 +41,105 @@ export default function SubmitPage() {
   >(null);
   const curvePoints = generateCurvePoints(project);
 
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+
   const handleMouseDown =
     (point: "x" | "y" | "middle") => (e: React.MouseEvent) => {
       e.preventDefault();
+
+      if (!svgRef.current) return;
+      const svg = svgRef.current;
+      const rect = svg.getBoundingClientRect();
+
+      const xScale = 200000 / rect.width;
+      const yScale = 100 / rect.height;
+
+      // Get current mouse position in chart coordinates
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const chartX = Math.round((mouseX * xScale) / 1000) * 1000;
+      const chartY = 100 - mouseY * yScale;
+
+      // Store the initial mouse click position
+      setDragStart({ x: chartX, y: chartY });
       setDraggingPoint(point);
     };
 
-  const computeBezierY = (x: number, project: Project) => {
-    if (project.xIntercept === 0) return 0;
-
-    const t = Math.max(0, Math.min(1, x / project.xIntercept)); // ✅ Clamp t within [0,1]
-    return (
-      (1 - t) ** 2 * project.yIntercept +
-      2 * (1 - t) * t * project.middlePoint.y +
-      t ** 2 * 0
-    );
-  };
-
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (!draggingPoint || !svgRef.current) return;
-
+      if (!draggingPoint || !svgRef.current || !dragStart) return;
+  
       const svg = svgRef.current;
       const rect = svg.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-
+  
       // Convert screen coordinates to chart values
       const xScale = 200000 / rect.width;
       const yScale = 100 / rect.height;
-
-      const chartX = Math.max(
-        0,
-        Math.min(Math.round((x * xScale) / 1000) * 1000, 200000),
-      );
-      let chartY = Math.max(0, Math.min(100 - y * yScale, 100));
-
+  
+      let chartX = Math.round((x * xScale) / 1000) * 1000;
+      let chartY = 100 - y * yScale;
+  
+      // Calculate movement delta
+      const deltaX = chartX - dragStart.x;
+      const deltaY = chartY - dragStart.y;
+  
+      console.log("Mouse:", x, y);
+      console.log("Chart:", chartX, chartY);
+      console.log("Delta:", deltaX, deltaY);
+  
       setProject((prev) => {
         switch (draggingPoint) {
-          case "x":
+          case "x": {
+            // ✅ Ensure `xIntercept` is within [0, 200,000]
+            const newXIntercept = Math.max(0, Math.min(prev.xIntercept + deltaX, 200000));
+  
+            // ✅ If middlePoint.x has not been changed manually, scale it proportionally
+            const wasMiddleMoved = dragStart.x !== prev.middlePoint.x;
+            const newMiddleX = wasMiddleMoved
+              ? Math.max(0, Math.min(prev.middlePoint.x + deltaX / 2, newXIntercept))
+              : (prev.middlePoint.x / prev.xIntercept) * newXIntercept;
+  
             return {
               ...prev,
-              xIntercept: chartX,
+              xIntercept: newXIntercept,
               middlePoint: {
-                x:
-                  prev.middlePoint.x > chartX ? chartX / 2 : prev.middlePoint.x, // ✅ Only resets if needed
+                x: newMiddleX, // ✅ Smooth transition, no snap
                 y: prev.middlePoint.y,
               },
             };
+          }
           case "y":
             return {
               ...prev,
-              yIntercept: chartY,
+              yIntercept: Math.max(0, Math.min(prev.yIntercept + deltaY, 100)), // ✅ Keep within 0-100
             };
           case "middle":
             return {
               ...prev,
               middlePoint: {
-                x: Math.max(0, Math.min(chartX, prev.xIntercept)), // ✅ Moves within range
-                y: chartY,
+                x: Math.max(0, Math.min(prev.middlePoint.x + deltaX, prev.xIntercept)), // ✅ Keep within x bounds
+                y: Math.max(0, Math.min(prev.middlePoint.y + deltaY, 100)), // ✅ Keep within y bounds
               },
             };
           default:
             return prev;
         }
       });
+  
+      // ✅ Keep updating dragStart for smooth dragging
+      setDragStart({ x: chartX, y: chartY });
     },
-    [draggingPoint],
+    [draggingPoint, dragStart]
   );
 
   const handleMouseUp = useCallback(() => {
     setDraggingPoint(null);
+    setDragStart(null);
   }, []);
 
   useEffect(() => {
@@ -222,10 +250,11 @@ export default function SubmitPage() {
                             100 -
                             ((curvePoints.reduce(
                               (prev, curr) =>
-                                Math.abs(curr.x - project.middlePoint.x) < Math.abs(prev.x - project.middlePoint.x)
+                                Math.abs(curr.x - project.middlePoint.x) <
+                                Math.abs(prev.x - project.middlePoint.x)
                                   ? curr
                                   : prev,
-                              curvePoints[0] // ✅ Ensure valid fallback
+                              curvePoints[0], // ✅ Ensure valid fallback
                             ).y ?? project.middlePoint.y) /
                               (106 - 0)) *
                               87 -
