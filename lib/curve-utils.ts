@@ -2,7 +2,7 @@ import { CurvePoint, Project } from "@/app/types";
 
 export function generateCurvePoints(
   project: Project,
-  numPoints: number = 50,
+  numPoints: number = 200,
 ): CurvePoint[] {
   const points: CurvePoint[] = [];
   const { xIntercept, yIntercept, middlePoint } = project;

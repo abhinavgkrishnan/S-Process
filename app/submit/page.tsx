@@ -48,13 +48,13 @@ export default function SubmitPage() {
     };
 
   const computeBezierY = (x: number, project: Project) => {
-    if (project.xIntercept === 0) return 0; // ✅ Prevent division by zero
+    if (project.xIntercept === 0) return 0;
 
-    const t = Math.max(0, Math.min(1, x / project.xIntercept)); // ✅ Clamp between 0 and 1
+    const t = Math.max(0, Math.min(1, x / project.xIntercept)); // ✅ Clamp t within [0,1]
     return (
-      (1 - t) ** 2 * project.yIntercept + // ✅ Ensure correct start point scaling
-      2 * (1 - t) * t * project.middlePoint.y + // ✅ Maintain proper middle control point
-      t ** 2 * 0 // ✅ Ensure end remains at 0
+      (1 - t) ** 2 * project.yIntercept +
+      2 * (1 - t) * t * project.middlePoint.y +
+      t ** 2 * 0
     );
   };
 
@@ -84,8 +84,9 @@ export default function SubmitPage() {
               ...prev,
               xIntercept: chartX,
               middlePoint: {
-                x: chartX / 2,
-                y: prev.middlePoint.y, // ✅ Keep `y` unchanged when moving `x`
+                x:
+                  prev.middlePoint.x > chartX ? chartX / 2 : prev.middlePoint.x, // ✅ Only resets if needed
+                y: prev.middlePoint.y,
               },
             };
           case "y":
@@ -97,8 +98,8 @@ export default function SubmitPage() {
             return {
               ...prev,
               middlePoint: {
-                x: prev.middlePoint.x, // ✅ Keep `x` unchanged
-                y: chartY, // ✅ Move freely, no snap-back dip
+                x: Math.max(0, Math.min(chartX, prev.xIntercept)), // ✅ Moves within range
+                y: chartY,
               },
             };
           default:
@@ -194,29 +195,42 @@ export default function SubmitPage() {
                         ref={svgRef}
                         className="absolute inset-0 pointer-events-auto"
                       >
-                        {/* X-Intercept Control Point (Moves along x-axis but stays inside) */}
+                        {/* X-Intercept Control Point */}
                         <circle
                           cx={`${((project.xIntercept - 0) / (214600 - 0)) * 87 + 13}%`}
-                          cy="87%" // Locked to the x-axis
+                          cy="87%"
                           r={6}
                           fill={project.color}
                           cursor="pointer"
                           onMouseDown={handleMouseDown("x")}
                         />
 
-                        {/* Y-Intercept Control Point (Moves up/down but stays inside) */}
+                        {/* Y-Intercept Control Point */}
                         <circle
-                          cx="13%" // Locked to the y-axis
+                          cx="13%"
                           cy={`${100 - ((project.yIntercept - 0) / (106 - 0)) * 87 - 13}%`}
                           r={6}
                           fill={project.color}
                           cursor="pointer"
                           onMouseDown={handleMouseDown("y")}
                         />
-                        {/* Middle Control Point (Moves up/down but stays on curve's midpoint) */}
+
+                        {/* Ensure midpoint dot is always exactly on the curve */}
                         <circle
-                          cx={`${(project.xIntercept / 2 / 214600) * 87 + 13}%`} // X is always at midpoint
-                          cy={`${100 - ((computeBezierY(project.xIntercept / 2, project) - 0) / (106 - 0)) * 87 - 13}%`} // ✅ Y is computed dynamically
+                          cx={`${((project.middlePoint.x - 0) / (214600 - 0)) * 87 + 13}%`} // ✅ X moves freely
+                          cy={`${
+                            100 -
+                            ((curvePoints.reduce(
+                              (prev, curr) =>
+                                Math.abs(curr.x - project.middlePoint.x) < Math.abs(prev.x - project.middlePoint.x)
+                                  ? curr
+                                  : prev,
+                              curvePoints[0] // ✅ Ensure valid fallback
+                            ).y ?? project.middlePoint.y) /
+                              (106 - 0)) *
+                              87 -
+                            13
+                          }%`} // ✅ Uses `reduce()` for best accuracy
                           r={6}
                           fill={project.color}
                           cursor="grab"
@@ -303,13 +317,38 @@ export default function SubmitPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Middle Point Impact</Label>
+                    <Label>Midpoint X Position</Label>
+                    <Slider
+                      value={[project.middlePoint.x]}
+                      onValueChange={([value]) =>
+                        setProject({
+                          ...project,
+                          middlePoint: {
+                            ...project.middlePoint,
+                            x: Math.max(0, Math.min(value, project.xIntercept)), // ✅ Only update X
+                          },
+                        })
+                      }
+                      min={0}
+                      max={project.xIntercept}
+                      step={1000}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Value: {project.middlePoint.x.toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Midpoint Y Position</Label>
                     <Slider
                       value={[project.middlePoint.y]}
                       onValueChange={([value]) =>
                         setProject({
                           ...project,
-                          middlePoint: { ...project.middlePoint, y: value },
+                          middlePoint: {
+                            ...project.middlePoint,
+                            y: Math.max(0, Math.min(value, 100)), // ✅ Only update Y
+                          },
                         })
                       }
                       min={0}
