@@ -25,31 +25,55 @@ export function generateCurvePoints(
   return points;
 }
 
-/**
- * Generates an aggregated curve by averaging multiple project curves.
- */
-export function calculateAggregatedCurve(projects: Project[]): CurvePoint[] {
-  const allPoints = projects.map((project) => generateCurvePoints(project));
-  const maxX = Math.max(...projects.map((p) => p.xIntercept));
+export function calculateAggregatedCurve(userSubmissions: Project[]): CurvePoint[] {
+  if (userSubmissions.length === 0) return [];
+
+  const maxValidX = Math.max(...userSubmissions.map((p) => p.xIntercept));
+  const stepSize = Math.min(500, maxValidX / 400); // Higher resolution sampling
+
   const aggregatedPoints: CurvePoint[] = [];
 
-  for (let i = 0; i <= 50; i++) {
-    const x = (maxX * i) / 50;
-    let totalY = 0;
-    let count = 0;
+  for (let x = 0; x <= maxValidX; x += stepSize) {
+    const yValues: number[] = [];
 
-    allPoints.forEach((projectPoints) => {
-      // Find the nearest point in each project curve
-      const nearestPoint = projectPoints.reduce((prev, curr) =>
-        Math.abs(curr.x - x) < Math.abs(prev.x - x) ? curr : prev,
+    userSubmissions.forEach((submission) => {
+      const curvePoints = generateCurvePoints(submission);
+
+      const lowerPoint = curvePoints.reduce((prev, curr) =>
+        curr.x <= x && curr.x > prev.x ? curr : prev
+      );
+      const upperPoint = curvePoints.reduce((prev, curr) =>
+        curr.x > x && curr.x < prev.x ? curr : prev
       );
 
-      totalY += nearestPoint.y;
-      count++;
+      let y = null;
+      if (lowerPoint.x === upperPoint.x) {
+        y = lowerPoint.y;
+      } else if (upperPoint.x !== lowerPoint.x) {
+        const ratio = (x - lowerPoint.x) / (upperPoint.x - lowerPoint.x);
+        y = lowerPoint.y + ratio * (upperPoint.y - lowerPoint.y);
+      }
+
+      if (y !== null) yValues.push(y);
     });
 
-    aggregatedPoints.push({ x, y: totalY / count });
+    const validYValues = yValues.filter((v) => v !== null && isFinite(v));
+    if (validYValues.length < userSubmissions.length / 3) continue; // Ignore low-data points
+
+    let avgY = validYValues.reduce((a, b) => a + b, 0) / validYValues.length;
+
+    // Apply Moving Average Smoothing
+    if (aggregatedPoints.length > 2) {
+      const prev1 = aggregatedPoints[aggregatedPoints.length - 1].y;
+      const prev2 = aggregatedPoints[aggregatedPoints.length - 2].y;
+      avgY = (prev2 + prev1 + avgY) / 3;
+    }
+
+    avgY = Math.max(0, Math.min(avgY, 100)); // Keep within bounds
+    aggregatedPoints.push({ x, y: avgY });
   }
 
+  console.log("=== Final Aggregated User Curve ===");
+  console.table(aggregatedPoints);
   return aggregatedPoints;
 }

@@ -14,9 +14,9 @@ export const sampleProjects: Project[] = [
     id: "2",
     name: "Education Access Program",
     description: "Digital learning resources for underserved schools",
-    xIntercept: 75000,
+    xIntercept: 193000,
     yIntercept: 95,
-    middlePoint: { x: 37500, y: 60 },
+    middlePoint: { x: 157500, y: 94 },
     color: "hsl(var(--chart-2))",
   },
   {

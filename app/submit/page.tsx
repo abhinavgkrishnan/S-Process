@@ -281,31 +281,6 @@ export default function SubmitPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Project Name</Label>
-                  <Input
-                    id="name"
-                    value={project.name}
-                    onChange={(e) =>
-                      setProject({ ...project, name: e.target.value })
-                    }
-                    placeholder="Enter project name"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Input
-                    id="description"
-                    value={project.description}
-                    onChange={(e) =>
-                      setProject({ ...project, description: e.target.value })
-                    }
-                    placeholder="Enter project description"
-                    required
-                  />
-                </div>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -397,7 +372,7 @@ export default function SubmitPage() {
                 </div>
 
                 <Button type="submit" className="w-full">
-                  Submit Project
+                  Submit Curve
                 </Button>
               </form>
             </CardContent>
