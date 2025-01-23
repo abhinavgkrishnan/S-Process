@@ -71,39 +71,45 @@ export default function SubmitPage() {
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!draggingPoint || !svgRef.current || !dragStart) return;
-  
+
       const svg = svgRef.current;
       const rect = svg.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-  
+
       // Convert screen coordinates to chart values
       const xScale = 200000 / rect.width;
       const yScale = 100 / rect.height;
-  
+
       let chartX = Math.round((x * xScale) / 1000) * 1000;
       let chartY = 100 - y * yScale;
-  
+
       // Calculate movement delta
       const deltaX = chartX - dragStart.x;
       const deltaY = chartY - dragStart.y;
-  
+
       console.log("Mouse:", x, y);
       console.log("Chart:", chartX, chartY);
       console.log("Delta:", deltaX, deltaY);
-  
+
       setProject((prev) => {
         switch (draggingPoint) {
           case "x": {
             // ✅ Ensure `xIntercept` is within [0, 200,000]
-            const newXIntercept = Math.max(0, Math.min(prev.xIntercept + deltaX, 200000));
-  
+            const newXIntercept = Math.max(
+              0,
+              Math.min(prev.xIntercept + deltaX, 200000),
+            );
+
             // ✅ If middlePoint.x has not been changed manually, scale it proportionally
             const wasMiddleMoved = dragStart.x !== prev.middlePoint.x;
             const newMiddleX = wasMiddleMoved
-              ? Math.max(0, Math.min(prev.middlePoint.x + deltaX / 2, newXIntercept))
+              ? Math.max(
+                  0,
+                  Math.min(prev.middlePoint.x + deltaX / 2, newXIntercept),
+                )
               : (prev.middlePoint.x / prev.xIntercept) * newXIntercept;
-  
+
             return {
               ...prev,
               xIntercept: newXIntercept,
@@ -122,7 +128,10 @@ export default function SubmitPage() {
             return {
               ...prev,
               middlePoint: {
-                x: Math.max(0, Math.min(prev.middlePoint.x + deltaX, prev.xIntercept)), // ✅ Keep within x bounds
+                x: Math.max(
+                  0,
+                  Math.min(prev.middlePoint.x + deltaX, prev.xIntercept),
+                ), // ✅ Keep within x bounds
                 y: Math.max(0, Math.min(prev.middlePoint.y + deltaY, 100)), // ✅ Keep within y bounds
               },
             };
@@ -130,11 +139,11 @@ export default function SubmitPage() {
             return prev;
         }
       });
-  
+
       // ✅ Keep updating dragStart for smooth dragging
       setDragStart({ x: chartX, y: chartY });
     },
-    [draggingPoint, dragStart]
+    [draggingPoint, dragStart],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -152,16 +161,6 @@ export default function SubmitPage() {
       };
     }
   }, [draggingPoint, handleMouseMove, handleMouseUp]);
-
-  useEffect(() => {
-    setProject((prev) => ({
-      ...prev,
-      middlePoint: {
-        x: prev.xIntercept / 2, // ✅ Ensure x stays at the center
-        y: prev.middlePoint.y, // ✅ Do NOT override y!
-      },
-    }));
-  }, [project.xIntercept]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -333,7 +332,14 @@ export default function SubmitPage() {
                         setProject({
                           ...project,
                           xIntercept: value,
-                          middlePoint: { ...project.middlePoint, x: value / 2 },
+                          // Only update middlePoint.x if it hasn't been manually moved
+                          middlePoint: {
+                            x:
+                              project.middlePoint.x === project.xIntercept / 2
+                                ? value / 2
+                                : project.middlePoint.x,
+                            y: project.middlePoint.y,
+                          },
                         })
                       }
                       min={10000}
